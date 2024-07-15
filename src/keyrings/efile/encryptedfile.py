@@ -147,7 +147,9 @@ class EncryptedFile(KeyringBackend) :
             if not os.path.exists(key_file):
                 self._gen_key(key_file)
         self.pw_obj = PasswordSalted(key_file)
+        # status is an in memory cache to avoid going back to disk if password already known
         self.status : Dict[str,Dict[str, PasswordStatus]]= defaultdict(dict)  # [str][str] = PasswordStatus
+
 
     @property
     def name(self) -> str:
@@ -194,7 +196,6 @@ class EncryptedFile(KeyringBackend) :
                 return decrypted
         return None
 
-    #def set_password(self, context: str, user: str, password: str) -> None:
     def set_password(self, context: str, user: str, pw: str) -> None:
         ciphered = self.pw_obj.encrypt(pw)
         c_str = binascii.hexlify(ciphered).decode()
@@ -205,6 +206,14 @@ class EncryptedFile(KeyringBackend) :
             user_config = lockedconfig[user]
             user_config[context] = c_str
             self.status[user][context] = PasswordStatus(pw, c_str)
+            fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
+            os.close(fd)
+            with open(self.data_file, 'w+') as configfile:
+                lockedconfig.write(configfile)
+
+    def delete_password(self, service: str, user: str) -> None:
+        with LockedConfig(self.data_file) as lockedconfig:
+            lockedconfig.remove_option(user,service)
             fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
             os.close(fd)
             with open(self.data_file, 'w+') as configfile:

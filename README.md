@@ -8,3 +8,6 @@ as plain text.
 
 The current implemetation has the kerying priority set to 20 to take precedence over the Chainer backend. 
 This may change in future releaeses.
+
+## Update
+Version 2.0 implements *delete_password*.
