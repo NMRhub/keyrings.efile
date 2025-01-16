@@ -11,3 +11,5 @@ This may change in future releaeses.
 
 ## Update
 Version 2.0 implements *delete_password*.
+
+Version 3.0 adds *FallbackPasswordHandler* and logging.
