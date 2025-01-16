@@ -11,7 +11,10 @@ from typing import Optional, NamedTuple, Dict
 import filelock
 from Crypto.Cipher import AES
 from jaraco.classes import properties
+from keyring import errors
 from keyring.backend import KeyringBackend
+
+from keyrings.efile import kef_logger
 
 """cache authentication in local file specified from config file.
 The password is entered manually from command line first time code is run. Subsequent
@@ -131,7 +134,6 @@ class PasswordSalted:
     def set_password(self, service: str, username: str, password: str) -> None:
         pass
 
-#class PasswordCache(password.Password):
 class EncryptedFile(KeyringBackend) :
 
     def __init__(self):
@@ -172,50 +174,59 @@ class EncryptedFile(KeyringBackend) :
                     rout.write(abyte)
         os.chmod(key_file, mode=0o400)
 
-    def get_password(self, context: str, user: str) -> Optional[str]:
+    def get_password(self, service: str, user: str) -> Optional[str]:
         """Return password for user if already set for context; otherwise prompt for and store password
         @param user: account name password corresponds to
-        @param context: application using password 
+        @param service: application using password 
         @param test_password: set specified password (implemented for testing)
         @return existing password or value from keyboard
         """
         try:
-            return self.status[user][context].password
+            return self.status[user][service].password
         except KeyError:
-            pass
+            kef_logger.debug(f"{service} {user} not in memory cache, looking up from file, reading {self.data_file}")
         with LockedConfig(self.data_file) as password_config:
             cc = password_config
             if not cc.has_section(user):
                 cc.add_section(user)
             user_config = cc[user]
-            hex_cipher = user_config.get(context)
+            hex_cipher = user_config.get(service)
             if hex_cipher is not None:
                 pw_cipher = binascii.unhexlify(hex_cipher)
                 decrypted = self.pw_obj.decrypt(pw_cipher)
-                self.status[user][context] = PasswordStatus(decrypted, hex_cipher)
+                self.status[user][service] = PasswordStatus(decrypted, hex_cipher)
                 return decrypted
         return None
 
-    def set_password(self, context: str, user: str, pw: str) -> None:
+    def set_password(self, service: str, user: str, pw: str) -> None:
         ciphered = self.pw_obj.encrypt(pw)
         c_str = binascii.hexlify(ciphered).decode()
-        self.status[user][context] = PasswordStatus(pw,c_str)
+        self.status[user][service] = PasswordStatus(pw, c_str)
         with LockedConfig(self.data_file) as lockedconfig:
             if not lockedconfig.has_section(user):
                 lockedconfig.add_section(user)
             user_config = lockedconfig[user]
-            user_config[context] = c_str
-            self.status[user][context] = PasswordStatus(pw, c_str)
+            user_config[service] = c_str
+            self.status[user][service] = PasswordStatus(pw, c_str)
             fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
             os.close(fd)
             with open(self.data_file, 'w+') as configfile:
                 lockedconfig.write(configfile)
+            kef_logger.debug(f"Wrote {self.data_file} for set")
 
     def delete_password(self, service: str, user: str) -> None:
-        with LockedConfig(self.data_file) as lockedconfig:
-            lockedconfig.remove_option(user,service)
-            fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
-            os.close(fd)
-            with open(self.data_file, 'w+') as configfile:
-                lockedconfig.write(configfile)
+        try:
+            if self.get_password(service,user) is not None:
+                with LockedConfig(self.data_file) as lockedconfig:
+                    lockedconfig.remove_option(user,service)
+                    fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
+                    os.close(fd)
+                    with open(self.data_file, 'w+') as configfile:
+                        lockedconfig.write(configfile)
+                    kef_logger.debug(f"Wrote {self.data_file} for delete")
+            else:
+                kef_logger.debug(f"No password for {service} {user}")
+        except Exception as e:
+            kef_logger.exception(f"delete {service} {user}")
+            raise errors.PasswordDeleteError(str(e))
 
