@@ -1,4 +1,45 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "keyrings.efile"
+dynamic = ["version"]
+authors = [{ name = "Gerard", email = "gweatherby@uchc.edu" }]
+description = "Encrypted keyfile without password"
+readme = "README.md"
+license = { text = "MIT license" }
+classifiers = [
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "filelock",
+    "keyring",
+    "properties",
+    "pycryptodome",
+]
+
+[project.optional-dependencies]
+cli = []
+
+[project.urls]
+Homepage = "https://github.com/NMRhub/keyrings.efile.git"
+
+[project.scripts]
+keyrings-efile = "keyrings.efile.cli:main"
+
+[project.entry-points."keyring.backends"]
+efile = "keyrings.efile.encryptedfile"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["keyrings.efile"]
+
+[tool.setuptools.dynamic]
+version = { attr = "keyrings.efile.__version__" }

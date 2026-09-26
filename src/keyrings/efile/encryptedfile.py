@@ -6,7 +6,7 @@ import secrets
 import string
 import sys
 from collections import defaultdict
-from typing import Optional, NamedTuple, Dict
+from typing import Optional, NamedTuple, Dict, List, Tuple
 
 import filelock
 from Crypto.Cipher import AES
@@ -213,6 +213,13 @@ class EncryptedFile(KeyringBackend) :
             with open(self.data_file, 'w+') as configfile:
                 lockedconfig.write(configfile)
             kef_logger.debug(f"Wrote {self.data_file} for set")
+
+    def list_entries(self) -> List[Tuple[str, str]]:
+        """Return sorted (service, user) pairs stored in the data file"""
+        with LockedConfig(self.data_file) as password_config:
+            return sorted((service, user)
+                          for user in password_config.sections()
+                          for service in password_config.options(user))
 
     def delete_password(self, service: str, user: str) -> None:
         try:
