@@ -1,3 +1,6 @@
+#!/bin/bash
+ORIGIN=$(dirname $(readlink -f $0))
+cd $ORIGIN
 rm -fr dist
 uv build --out-dir dist . 
 uv build --out-dir dist cli
