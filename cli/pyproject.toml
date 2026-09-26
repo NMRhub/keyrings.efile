@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "keyrings.efile.cli"
+version = "1.0"
+authors = [{ name = "Gerard", email = "gweatherby@uchc.edu" }]
+description = "Command line tool to manage keyrings.efile passwords"
+readme = "README.md"
+license = { text = "MIT license" }
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "keyrings.efile>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/NMRhub/keyrings.efile.git"
+
+[project.scripts]
+keyrings-efile = "keyrings.efile.cli:main"
+
+# ships only keyrings/efile/cli.py; keyrings/__init__.py and keyrings/efile/__init__.py
+# come from the keyrings.efile distribution
+[tool.hatch.build.targets.wheel]
+only-include = ["src/keyrings/efile/cli.py"]
+sources = ["src"]

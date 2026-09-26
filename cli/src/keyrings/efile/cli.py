@@ -2,6 +2,7 @@
 import argparse
 import logging
 import sys
+from importlib.metadata import version
 
 from keyrings.efile import EncryptedFile, kef_logger, __version__
 
@@ -42,7 +43,8 @@ def main(argv=None) -> int:
                                      description="Manage passwords stored by keyrings.efile",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-l', '--loglevel', default='WARN', help="Python logging level")
-    parser.add_argument('--version', action='version', version=f"%(prog)s {__version__}")
+    parser.add_argument('--version', action='version',
+                        version=f"%(prog)s {version('keyrings.efile.cli')} (keyrings.efile {__version__})")
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     subparsers.add_parser('list', help="list stored services and users").set_defaults(func=_list)

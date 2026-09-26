@@ -59,8 +59,12 @@ Version 2.0 implements *delete_password*.
 
 Version 3.0 adds *FallbackPasswordHandler* and logging.
 
+Version 4.0 adds *list_entries*.
+
 ## Command line
-`pip install keyrings.efile[cli]` provides the *keyrings-efile* command:
+The *keyrings-efile* command is provided by the separate
+[keyrings.efile.cli](cli/README.md) package, installed with either
+`pip install keyrings.efile.cli` or `pip install keyrings.efile[cli]`:
 
     keyrings-efile list                  # list stored services and users
     keyrings-efile show SERVICE USER     # display password

@@ -26,13 +26,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cli = []
+cli = ["keyrings.efile.cli"]
 
 [project.urls]
 Homepage = "https://github.com/NMRhub/keyrings.efile.git"
-
-[project.scripts]
-keyrings-efile = "keyrings.efile.cli:main"
 
 [project.entry-points."keyring.backends"]
 efile = "keyrings.efile.encryptedfile"
