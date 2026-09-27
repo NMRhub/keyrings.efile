@@ -1,5 +1,6 @@
 import binascii
 import configparser
+import hashlib
 import os
 import random
 import secrets
@@ -53,6 +54,21 @@ class LockedConfig:
 _CACHE_KEY = 'Password Cache'
 _FILE_OPT = 'local file'
 _KEY_OPT = 'key file'
+_DMI_FILE = '/sys/firmware/dmi/entries/1-0/raw'
+# prefix of values encrypted with key combined with DMI system information
+_V2_PREFIX = 'v2:'
+
+
+def _machine_id() -> Optional[bytes]:
+    """return DMI system information (type 1) if running as root and available"""
+    if os.geteuid() != 0:
+        return None
+    try:
+        with open(_DMI_FILE, 'rb') as f:
+            return f.read()
+    except OSError:
+        kef_logger.warning(f"Unable to read {_DMI_FILE}")
+        return None
 
 
 def _random_in_range(low: int, high: int):
@@ -72,10 +88,13 @@ class PasswordSalted:
     __DIGIT_SIZE = 3
     _pool = None
 
-    def __init__(self, key_file: str):
-        """cparser ConfigParser instance"""
+    def __init__(self, key_file: str, machine_id: Optional[bytes] = None):
+        """key_file binary key file
+        machine_id if given, combined with key file contents to bind encryption to hardware"""
         with open(key_file, "br") as fhandle:
             self.cipher_key = fhandle.read()
+        if machine_id is not None:
+            self.cipher_key = hashlib.sha256(self.cipher_key + machine_id).digest()
         self.initialization_vector = bytes.fromhex(self._IV_STR)
 
     @staticmethod
@@ -148,7 +167,9 @@ class EncryptedFile(KeyringBackend) :
         with lock:
             if not os.path.exists(key_file):
                 self._gen_key(key_file)
-        self.pw_obj = PasswordSalted(key_file)
+        self.legacy_pw_obj = PasswordSalted(key_file)
+        machine_id = _machine_id()
+        self.machine_pw_obj = PasswordSalted(key_file, machine_id) if machine_id is not None else None
         # status is an in memory cache to avoid going back to disk if password already known
         self.status : Dict[str,Dict[str, PasswordStatus]]= defaultdict(dict)  # [str][str] = PasswordStatus
 
@@ -191,28 +212,48 @@ class EncryptedFile(KeyringBackend) :
                 cc.add_section(user)
             user_config = cc[user]
             hex_cipher = user_config.get(service)
-            if hex_cipher is not None:
-                pw_cipher = binascii.unhexlify(hex_cipher)
-                decrypted = self.pw_obj.decrypt(pw_cipher)
+            if hex_cipher is None:
+                return None
+            if hex_cipher.startswith(_V2_PREFIX):
+                if self.machine_pw_obj is None:
+                    raise errors.KeyringError(f"{service} {user} requires root access to {_DMI_FILE} to decrypt")
+                decrypted = self.machine_pw_obj.decrypt(binascii.unhexlify(hex_cipher[len(_V2_PREFIX):]))
                 self.status[user][service] = PasswordStatus(decrypted, hex_cipher)
                 return decrypted
-        return None
+            decrypted = self.legacy_pw_obj.decrypt(binascii.unhexlify(hex_cipher))
+            if self.machine_pw_obj is not None:
+                kef_logger.debug(f"Rewriting {service} {user} in machine bound format")
+                c_str = self._encode(decrypted)
+                user_config[service] = c_str
+                self._write(cc)
+            else:
+                c_str = hex_cipher
+            self.status[user][service] = PasswordStatus(decrypted, c_str)
+            return decrypted
+
+    def _encode(self, pw: str) -> str:
+        """encrypt password and hex encode, using machine bound format if available"""
+        if self.machine_pw_obj is not None:
+            return _V2_PREFIX + binascii.hexlify(self.machine_pw_obj.encrypt(pw)).decode()
+        return binascii.hexlify(self.legacy_pw_obj.encrypt(pw)).decode()
+
+    def _write(self, lockedconfig: configparser.ConfigParser) -> None:
+        """write config to data file; caller must hold lock"""
+        fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
+        os.close(fd)
+        with open(self.data_file, 'w+') as configfile:
+            lockedconfig.write(configfile)
+        kef_logger.debug(f"Wrote {self.data_file}")
 
     def set_password(self, service: str, user: str, pw: str) -> None:
-        ciphered = self.pw_obj.encrypt(pw)
-        c_str = binascii.hexlify(ciphered).decode()
-        self.status[user][service] = PasswordStatus(pw, c_str)
+        c_str = self._encode(pw)
         with LockedConfig(self.data_file) as lockedconfig:
             if not lockedconfig.has_section(user):
                 lockedconfig.add_section(user)
             user_config = lockedconfig[user]
             user_config[service] = c_str
             self.status[user][service] = PasswordStatus(pw, c_str)
-            fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
-            os.close(fd)
-            with open(self.data_file, 'w+') as configfile:
-                lockedconfig.write(configfile)
-            kef_logger.debug(f"Wrote {self.data_file} for set")
+            self._write(lockedconfig)
 
     def list_entries(self) -> List[Tuple[str, str]]:
         """Return sorted (service, user) pairs stored in the data file"""
@@ -226,11 +267,8 @@ class EncryptedFile(KeyringBackend) :
             if self.get_password(service,user) is not None:
                 with LockedConfig(self.data_file) as lockedconfig:
                     lockedconfig.remove_option(user,service)
-                    fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
-                    os.close(fd)
-                    with open(self.data_file, 'w+') as configfile:
-                        lockedconfig.write(configfile)
-                    kef_logger.debug(f"Wrote {self.data_file} for delete")
+                    self._write(lockedconfig)
+                self.status[user].pop(service, None)
             else:
                 kef_logger.debug(f"No password for {service} {user}")
         except Exception as e:
