@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "keyrings.efile"
-dynamic = ["version"]
+version = "4.2"
 authors = [{ name = "Gerard", email = "gweatherby@uchc.edu" }]
 description = "Encrypted keyfile without password"
 readme = "README.md"

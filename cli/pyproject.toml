@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "keyrings.efile.cli"
-version = "1.0"
+dynamic = ["version"]
 authors = [{ name = "Gerard", email = "gweatherby@uchc.edu" }]
 description = "Command line tool to manage keyrings.efile passwords"
 readme = "README.md"
@@ -29,6 +29,11 @@ keyrings-efile = "keyrings.efile.cli:main"
 
 # ships only keyrings/efile/cli.py; keyrings/__init__.py and keyrings/efile/__init__.py
 # come from the keyrings.efile distribution
+[tool.hatch.version]
+source = "regex"
+path = "../pyproject.toml"
+pattern = '(?m)^version = "(?P<version>[^"]+)"'
+
 [tool.hatch.build.targets.wheel]
 only-include = ["src/keyrings/efile/cli.py"]
 sources = ["src"]

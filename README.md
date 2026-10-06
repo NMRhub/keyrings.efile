@@ -63,6 +63,8 @@ Version 4.0 adds *list_entries*.
 
 Version 4.1 adds uses system firmware information when encrypting passwords as root. 
 
+Version 4.2 makes writes atomic and adds logging. 
+
 ## Command line
 The *keyrings-efile* command is provided by the separate
 [keyrings.efile.cli](cli/README.md) package, installed with either

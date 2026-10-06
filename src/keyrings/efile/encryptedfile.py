@@ -220,7 +220,13 @@ class EncryptedFile(KeyringBackend) :
                 decrypted = self.machine_pw_obj.decrypt(binascii.unhexlify(hex_cipher[len(_V2_PREFIX):]))
                 self.status[user][service] = PasswordStatus(decrypted, hex_cipher)
                 return decrypted
-            decrypted = self.legacy_pw_obj.decrypt(binascii.unhexlify(hex_cipher))
+            try:
+                cipher_bytes = binascii.unhexlify(hex_cipher)
+            except binascii.Error:
+                kef_logger.error(f"Invalid stored cipher for {service} {user} in {self.data_file}: "
+                                 f"length={len(hex_cipher)} value={hex_cipher[:8]!r}...")
+                raise
+            decrypted = self.legacy_pw_obj.decrypt(cipher_bytes)
             if self.machine_pw_obj is not None:
                 kef_logger.debug(f"Rewriting {service} {user} in machine bound format")
                 c_str = self._encode(decrypted)
@@ -239,10 +245,19 @@ class EncryptedFile(KeyringBackend) :
 
     def _write(self, lockedconfig: configparser.ConfigParser) -> None:
         """write config to data file; caller must hold lock"""
-        fd = os.open(self.data_file, os.O_CREAT, mode=0o600)
-        os.close(fd)
-        with open(self.data_file, 'w+') as configfile:
-            lockedconfig.write(configfile)
+        # write to a temp file and rename so readers never see a truncated file
+        tmp_file = f"{self.data_file}.tmp{os.getpid()}"
+        fd = os.open(tmp_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, mode=0o600)
+        try:
+            with os.fdopen(fd, 'w') as configfile:
+                lockedconfig.write(configfile)
+                configfile.flush()
+                os.fsync(configfile.fileno())
+            os.replace(tmp_file, self.data_file)
+        except BaseException:
+            if os.path.exists(tmp_file):
+                os.unlink(tmp_file)
+            raise
         kef_logger.debug(f"Wrote {self.data_file}")
 
     def set_password(self, service: str, user: str, pw: str) -> None:
